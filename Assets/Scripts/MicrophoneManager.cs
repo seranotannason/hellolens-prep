@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Windows.Speech;
+using System.Net.Http;
 
 public class MicrophoneManager : MonoBehaviour {
 
@@ -17,7 +18,9 @@ public class MicrophoneManager : MonoBehaviour {
     // Component converting speech to text 
     private DictationRecognizer dictationRecognizer;
 
-      private void Awake() 
+    private string firebaseEndpoint = "https://hellolens-5fbd4.firebaseio.com/";
+
+    private void Awake() 
     { 
         // Set this class to behave similar to singleton 
         instance = this; 
@@ -25,6 +28,10 @@ public class MicrophoneManager : MonoBehaviour {
 
     void Start() 
     { 
+        // For conversation storage 
+        private static readonly HttpClient client = new HttpClient();
+        private conversation = "";
+
         //Use Unity Microphone class to detect devices and setup AudioSource 
         if(Microphone.devices.Length > 0) 
         { 
@@ -62,6 +69,25 @@ public class MicrophoneManager : MonoBehaviour {
     { 
         Results.instance.SetMicrophoneStatus("Mic sleeping"); 
         Microphone.End(null); 
+
+        // Save conversation to Firebase
+        var currentCounter = client.GetAsync(firebaseEndpoint + "counter.json");
+        var newCounter = currentCounter + 1;
+        var currentTime = DateTime.Now.ToString("yyyy-MM-dd");
+
+        var newConversation = new Dictionary<string, string>
+        {
+           { "conversation" + str(newCounter), 
+                { "timestamp": currentTime,
+                  "text": conversation } 
+            },
+        };
+
+        var content = new FormUrlEncodedContent(newConversation);
+        var response = await client.PatchAsync(firebaseEndpoint + "conversations.json", content);
+        var response2 = await client.PatchAsync(firebaseEndpoint + ".json");
+        var responseString = await response.Content.ReadAsStringAsync();
+
         dictationRecognizer.DictationResult -= DictationRecognizer_DictationResult; 
         dictationRecognizer.Dispose(); 
     }
@@ -74,6 +100,7 @@ public class MicrophoneManager : MonoBehaviour {
     {
         // Update UI with dictation captured
         Results.instance.SetDictationResult(text);
+        conversation += text + "\n";
 
         // Start the coroutine that process the dictation through Azure 
         StartCoroutine(Translator.instance.TranslateWithUnityNetworking(text));
